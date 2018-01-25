@@ -33,16 +33,19 @@ function F_ss!(xcdot::Vector{Float64},xc::Vector{Float64}, xd::Array{Int64}, t::
   Vd = xc[2];
 
   No_ampa = xd[2];
+  No_nmda = xd[4];
 
   gamma_ampa = parms[2];
   E_ampa = parms[3];
+  gamma_nmda = parms[5];
+  E_nmda = parms[6];
   Rneck = parms[7];
   Cs = parms[8];
   Cd = parms[9];
   gdend = parms[10];
   Eleak = parms[11];
 
-  xcdot[1] = ( -(Vs-Vd)/Rneck - No_ampa*gamma_ampa*(Vs-E_ampa) )/Cs;
+  xcdot[1] = ( -(Vs-Vd)/Rneck - No_ampa*gamma_ampa*(Vs-E_ampa) - No_nmda*gamma_nmda*(Vs-E_nmda) )/Cs;
   # xcdot[1] = ( -(Vs-Vd)/Rneck )/Cs;
   xcdot[2] = ( -(Vd-Vs)/Rneck - gdend*(Vd-Eleak) )/Cd;
 
@@ -54,25 +57,25 @@ function R_ss(xc, xd, t, parms, sum_rate::Bool)
   # in this case,  the transitions are xd->xd+2 or xd->xd-2
   N_ampa = parms[1];
   if sum_rate==false
-    return vec([ xd[1]*100, xd[2]*100 ])
+    return vec([ xd[1]*100, xd[2]*500, xd[3]*100, xd[4]*500])
   else
     return vec([10,10])
   end
 end
 
 # matrix of jumps for the discrete variables, analogous to chemical reactions
-const nu = [[-1 1];[1 -1]]
+const nu = [[-1 1 0 0];[1 -1 0 0];[0 0 -1 1];[0 0 1 -1]]
 
 #######
 # INITIAL CONDITIONS
 ######
 xc0 = vec([-70e-3, -70e-3])
-xd0 = vec([N_ampa, 0]); # Initial number of AMPArs closed, open
+xd0 = vec([N_ampa, 0, N_nmda, 0]); # Initial number of AMPA/NMDArs closed, open
 
 
 
 # parameters
-tf = 500e-3
+tf = 2e0
 
 ########
 # RUN PROGRAM
@@ -86,6 +89,7 @@ result =  @time PDMP.pdmp(100,xc0,xd0,F_ss!,R_ss,nu,parms,0.0,tf,false)
 
 using Plots, GR
 gr()
-Plots.plot(result.time, result.xd[2,:],line=:step,xlabel = "Time (s)",ylabel = "Number AMPARs",label="Xd")
+Plots.plot(result.time, result.xd[2,:],line=:step,xlabel = "Time (s)",ylabel = "Number open",label="AMPA")
+Plots.plot!(result.time, result.xd[4,:],line=:step,xlabel = "Time (s)",ylabel = "Number open",label="NMDA")
 Plots.plot(result.time, result.xc[1,:],label="Vsp")
 Plots.plot!(result.time, result.xc[2,:],label="Vdend")
