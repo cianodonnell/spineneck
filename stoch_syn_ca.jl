@@ -2,6 +2,20 @@
 # load libraries
 using PDMP,Sundials
 
+# Continuous variables:
+# 1) Spine voltage
+# 2) Dendrite voltage
+# 3) Spine calcium concentration
+#
+# Discrete variables
+# 1) N_ampa_closed
+# 2) N_ampa_open
+# 3) N_nmda_closed
+# 4) N_nmda_open
+# 5) N_nmda_B1
+# 6) N_nmda_B2
+# NMDAR model from Jahr and Stevens J Neurosci (1990)
+
 ######
 # PARAMETERS
 ######
@@ -9,9 +23,12 @@ using PDMP,Sundials
 N_ampa = 100 # number of AMPARs
 gamma_ampa = 20.0e-12 # (S) AMPA single channel conductance
 E_ampa = 0.0 # mV
+
 N_nmda = 20 # number of NMDARs
 gamma_nmda = 20.0e-12 # (S) NMDA single channel conductance
 E_nmda = E_ampa
+
+Mg = 1 # uM
 
 Cs = 1e-6*1e-8*1; # F; spine head capacitance
 Cd = 1e-6*1e-8*500; # F; dendrite capacitance
@@ -26,7 +43,7 @@ eta_ca_nmdar = 1 # scaling constant determining magnitude of calcium influx rela
 ca_tau = 0.014 # s, spine calcium decay time constant (pumping)
 
 # collect parameters
-parms = Vector{Float64}([N_ampa, gamma_ampa, E_ampa, N_nmda, gamma_nmda, E_nmda, R_neck, Cs, Cd, gdend, Eleak, glu_base, glu_width, eta_ca_nmdar, ca_tau]);
+parms = Vector{Float64}([N_ampa, gamma_ampa, E_ampa, N_nmda, gamma_nmda, E_nmda, R_neck, Cs, Cd, gdend, Eleak, glu_base, glu_width, eta_ca_nmdar, ca_tau, Mg]);
 
 ###########
 # DEFINE DYNAMICS
@@ -65,18 +82,47 @@ end
 # Discrete stochastic variables: Number of open ampa
 function R_ss(xc, xd, t, parms, sum_rate::Bool)
   # rate function for each transition
-  # in this case,  the transitions are xd->xd+2 or xd->xd-2
+  Vs = xc[1];
+
   N_ampa = parms[1];
   glu = parms[12] # Glutamate present? 0 = no, 1 = yes
+  Mg = parms[16];
   if sum_rate==false
-    return vec([ xd[1]*glu*3000, xd[2]*500, xd[3]*glu*3000, xd[4]*16])
+    return vec([ xd[1]*glu*3000,
+                 xd[2]*500,
+                 xd[3]*glu*3000,
+                 xd[4]*1000*exp(-2.847), # A
+                 xd[4]*1000*exp(-0.016*Vs - 2.91), # a1
+                 xd[5]*1000*exp(0.009*Vs + 1.22), # b1
+                 xd[5]*1000*exp(-0.693), # B1
+                 xd[4]*Mg*1000*exp(-0.045*Vs - 6.97), # a2
+                 xd[6]*1000*exp(0.017*Vs + 0.96), # b2
+                 xd[6]*1000*exp(-3.101) ]) # B2
   else
-    return xd[1]*glu*3000 + xd[2]*500 + xd[3]*glu*3000 + xd[4]*16
+    return       xd[1]*glu*3000 +
+                 xd[2]*500 +
+                 xd[3]*glu*3000 +
+                 xd[4]*1000*exp(-2.847) +
+                 xd[4]*1000*exp(-0.016*Vs - 2.91) +
+                 xd[5]*1000*exp(0.009*Vs + 1.22) +
+                 xd[5]*1000*exp(-0.693) +
+                 xd[4]*Mg*1000*exp(-0.045*Vs - 6.97) +
+                 xd[6]*1000*exp(0.017*Vs + 0.96) +
+                 xd[6]*1000*exp(-3.101)
   end
 end
 
 # matrix of jumps for the discrete variables, analogous to chemical reactions
-const nu = [[-1 1 0 0];[1 -1 0 0];[0 0 -1 1];[0 0 1 -1]]
+const nu = [[-1 1 0 0 0 0]; # AMPA C -> O
+            [1 -1 0 0 0 0]; # AMPA O -> C
+            [0 0 -1 1 0 0]; # C -> O
+            [0 0 1 -1 0 0]; # O -> C
+            [0 0 0 -1 1 0]; # O -> B1
+            [0 0 0 1 -1 0]; # B1 -> O
+            [0 0 1 0 -1 0];  # B1 -> C
+            [0 0 0 -1 0 1]; # O -> B2
+            [0 0 0 1 0 -1]; # B2 -> O
+            [0 0 1 0 0 -1]] # B2 -> C
 
 # function to run between events
 function stim_events(xc0,xd0,parms,event_times, event_indices)
@@ -126,7 +172,7 @@ end
 # INITIAL CONDITIONS
 ######
 xc0 = vec([-70e-3, -70e-3, 0])
-xd0 = vec([N_ampa, 0, N_nmda, 0]); # Initial number of AMPA/NMDArs closed, open
+xd0 = vec([N_ampa, 0, N_nmda, 0, 0, 0]); # Initial states of AMPA/NMDArs
 
 # parameters
 tf = 1000 # ms
@@ -149,8 +195,8 @@ tt,XC,XD = stim_events(xc0,xd0,parms,event_times,event_indices);
 
 using Plots, GR
 plotly(reuse=false)
-Plots.plot(tt, XD[2,:],line=:step,xlabel = "Time (s)",ylabel = "Number open",label="AMPA")
-Plots.plot!(tt, XD[4,:],line=:step,xlabel = "Time (s)",ylabel = "Number open",label="NMDA")
-Plots.plot(tt, XC[1,:],label="Vsp")
-Plots.plot!(tt, XC[2,:],label="Vdend")
-Plots.plot(tt,XC[3,:],label="Spine [Ca2+]")
+Plots.plot(tt*1000, XD[2,:],line=:step,xlabel = "Time (ms)",ylabel = "Number open",label="AMPA")
+Plots.plot!(tt*1000, XD[4,:],line=:step,xlabel = "Time (ms)",ylabel = "Number open",label="NMDA")
+Plots.plot(tt*1000, XC[1,:],label="Vsp")
+Plots.plot!(tt*1000, XC[2,:],label="Vdend")
+Plots.plot(tt*1000,XC[3,:],label="Spine [Ca2+]")
