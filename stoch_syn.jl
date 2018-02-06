@@ -121,11 +121,11 @@ xc0 = vec([-70e-3, -70e-3])
 xd0 = vec([N_ampa, 0, N_nmda, 0]); # Initial number of AMPA/NMDArs closed, open
 
 # parameters
-tf = 100 # ms
+tf = 50 # ms
 
 # Event times
 event_times = 1e-3*collect(5:5:tf)
-event_times = [10e-3 100e-3]
+# event_times = [10e-3 100e-3]
 event_indices = zeros(UInt8,event_times)
 event_indices[1] = 1
 

@@ -193,10 +193,33 @@ dummy =  PDMP.pdmp(100,xc0,xd0,F_ss!,R_ss,nu,parms,0.0,tf*1e-3,false)
 # compute a trajectory
 tt,XC,XD = stim_events(xc0,xd0,parms,event_times,event_indices);
 
+ntrials = 10
+results_time = Vector(ntrials)
+results_XC = Vector(ntrials)
+results_XD = Vector(ntrials)
+for countloop = 1:ntrials
+  results_time[countloop],results_XC[countloop],results_XD[countloop] = stim_events(xc0,xd0,parms,event_times,event_indices);
+end
+
 using Plots, GR
-plotly(reuse=false)
-Plots.plot(tt*1000, XD[2,:],line=:step,xlabel = "Time (ms)",ylabel = "Number open",label="AMPA")
-Plots.plot!(tt*1000, XD[4,:],line=:step,xlabel = "Time (ms)",ylabel = "Number open",label="NMDA")
-Plots.plot(tt*1000, XC[1,:],label="Vsp")
-Plots.plot!(tt*1000, XC[2,:],label="Vdend")
-Plots.plot(tt*1000,XC[3,:],label="Spine [Ca2+]")
+gr(reuse=false)
+
+# Plots.plot(tt*1000, XD[2,:],line=:step,xlabel = "Time (ms)",ylabel = "Number open",label="AMPA")
+# Plots.plot!(tt*1000, XD[4,:],line=:step,xlabel = "Time (ms)",ylabel = "Number open",label="NMDA")
+# Plots.plot(tt*1000, XC[1,:],label="Vsp")
+# Plots.plot!(tt*1000, XC[2,:],label="Vdend")
+# Plots.plot(tt*1000,XC[3,:],label="Spine [Ca2+]")
+
+p = Plots.plot(results_time[1]*1000, results_XD[1][2,:],line=:step, linecolor=:blue)
+for i = 1:ntrials
+  Plots.plot!(results_time[i]*1000, results_XD[i][2,:],line=:step,linecolor=:blue)
+  Plots.plot!(results_time[i]*1000, results_XD[i][4,:],line=:step,linecolor=:red)
+end
+p
+
+gr(reuse=false)
+q = Plots.plot(results_time[1]*1000, results_XC[1][3,:],line=:step, linecolor=:green)
+for i = 2:ntrials
+  Plots.plot!(results_time[i]*1000, results_XC[i][3,:],line=:step,linecolor=:green)
+end
+q
