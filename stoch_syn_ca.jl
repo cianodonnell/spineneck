@@ -14,22 +14,41 @@ using PDMP,Sundials
 # 4) N_nmda_open
 # 5) N_nmda_B1
 # 6) N_nmda_B2
+# 7) Car_m0h0
+# 8) Car_m1h0
+# 9) Car_m0h1
+# 10) Car_open
+# 11) Cat_m0h0
+# 12) Cat_m1h0
+# 13) Cat_m0h1
+# 14) Cat_open
+
 # NMDAR model from Jahr and Stevens J Neurosci (1990)
+
 
 ######
 # PARAMETERS
 ######
 
+# AMPARs
 N_ampa = 100 # number of AMPARs
 gamma_ampa = 20.0e-12 # (S) AMPA single channel conductance
 E_ampa = 0.0 # mV
 
+# NMDARs
 N_nmda = 20 # number of NMDARs
 gamma_nmda = 20.0e-12 # (S) NMDA single channel conductance
 E_nmda = E_ampa
-
 Mg = 1 # uM
 
+# Calcium channels
+E_cav = 10e-3 # mV
+N_car = 5 # number of R-type calcium channels
+gamma_car = 17e-12  # (S) R-type single channel conductance
+N_cat = 5 # number of T-type calcium channels
+gamma_cat = 10e-12  # (S) T-type single channel conductance
+
+# Electrical properties of spine
 Cs = 1e-6*1e-8*1; # F; spine head capacitance
 Cd = 1e-6*1e-8*500; # F; dendrite capacitance
 gdend = 1/(100e6); # Siemens; dendrite leak conductance
@@ -39,7 +58,8 @@ R_neck = 500.0e6 # Ohm
 glu_base = 1e-4 # glutamate pulse
 glu_width = 2.0e-4 # (ms) glutamate pulse width
 
-eta_ca_nmdar = 1 # scaling constant determining magnitude of calcium influx relative to NMDAR activation
+eta_ca_nmdar = 0.1 # scaling constant determining magnitude of calcium influx relative to NMDAR current
+eta_ca_cav = 1 # scaling constant determining magnitude of calcium influx relative to CaV current
 ca_tau = 0.014 # s, spine calcium decay time constant (pumping)
 
 # collect parameters
@@ -72,10 +92,17 @@ function F_ss!(xcdot::Vector{Float64},xc::Vector{Float64}, xd::Array{Int64}, t::
   eta_ca_nmdar = parms[14];
   ca_tau = parms[15];
 
-  xcdot[1] = ( -(Vs-Vd)/Rneck - No_ampa*gamma_ampa*(Vs-E_ampa) - No_nmda*gamma_nmda*(Vs-E_nmda) )/Cs;
+  xcdot[1] = ( -(Vs-Vd)/Rneck
+               - No_ampa*gamma_ampa*(Vs-E_ampa)
+               - No_nmda*gamma_nmda*(Vs-E_nmda)
+               - No_car*gamma_car*(Vs-E_cav)
+               - No_cat*gamma_cat*(Vs-E_cav) )/Cs;
   # xcdot[1] = ( -(Vs-Vd)/Rneck )/Cs;
   xcdot[2] = ( -(Vd-Vs)/Rneck - gdend*(Vd-Eleak) )/Cd;
-  xcdot[3] = -Ca/ca_tau + No_nmda*eta_ca_nmdar;
+  xcdot[3] = -Ca/ca_tau
+            + eta_ca_nmdar*No_nmda*gamma_nmda*(E_nmda-Vs)
+            + eta_ca_cav*No_car*gamma_car*(E_cav-Vs)
+            + eta_ca_cav*No_cat*gamma_cat*(E_cav-Vs);
 
 end
 
@@ -113,16 +140,32 @@ function R_ss(xc, xd, t, parms, sum_rate::Bool)
 end
 
 # matrix of jumps for the discrete variables, analogous to chemical reactions
-const nu = [[-1 1 0 0 0 0]; # AMPA C -> O
-            [1 -1 0 0 0 0]; # AMPA O -> C
-            [0 0 -1 1 0 0]; # C -> O
-            [0 0 1 -1 0 0]; # O -> C
-            [0 0 0 -1 1 0]; # O -> B1
-            [0 0 0 1 -1 0]; # B1 -> O
-            [0 0 1 0 -1 0];  # B1 -> C
-            [0 0 0 -1 0 1]; # O -> B2
-            [0 0 0 1 0 -1]; # B2 -> O
-            [0 0 1 0 0 -1]] # B2 -> C
+const nu = [[-1 1 0 0 0 0 0 0 0 0 0 0 0 0]; # AMPA C -> O
+            [1 -1 0 0 0 0 0 0 0 0 0 0 0 0]; # AMPA O -> C
+            [0 0 -1 1 0 0 0 0 0 0 0 0 0 0]; # NMDA C -> O
+            [0 0 1 -1 0 0 0 0 0 0 0 0 0 0]; # NMDA O -> C
+            [0 0 0 -1 1 0 0 0 0 0 0 0 0 0]; # NMDA O -> B1
+            [0 0 0 1 -1 0 0 0 0 0 0 0 0 0]; # NMDA B1 -> O
+            [0 0 1 0 -1 0 0 0 0 0 0 0 0 0]; # NMDA B1 -> C
+            [0 0 0 -1 0 1 0 0 0 0 0 0 0 0]; # NMDA O -> B2
+            [0 0 0 1 0 -1 0 0 0 0 0 0 0 0]; # NMDA B2 -> O
+            [0 0 1 0 0 -1 0 0 0 0 0 0 0 0]; # NMDA B2 -> C
+            [0 0 0 0 0 0 -1 1 0 0 0 0 0 0]; # CaR m0h0 -> m1h0
+            [0 0 0 0 0 0 1 -1 0 0 0 0 0 0]; # CaR m1h0 -> m0h0
+            [0 0 0 0 0 0 -1 0 1 0 0 0 0 0]; # CaR m0h0 -> m0h1
+            [0 0 0 0 0 0 1 0 -1 0 0 0 0 0]; # CaR m0h1 -> m0h0
+            [0 0 0 0 0 0 0 -1 0 1 0 0 0 0]; # CaR m1h0 -> O
+            [0 0 0 0 0 0 0 1 0 -1 0 0 0 0]; # CaR O -> m1h0
+            [0 0 0 0 0 0 0 0 -1 1 0 0 0 0]; # CaR m0h1 -> O
+            [0 0 0 0 0 0 0 0 1 -1 0 0 0 0]; # CaR O -> m0h1
+            [0 0 0 0 0 0 0 0 0 0 -1 1 0 0]; # CaT m0h0 -> m1h0
+            [0 0 0 0 0 0 0 0 0 0 1 -1 0 0]; # CaT m1h0 -> m0h0
+            [0 0 0 0 0 0 0 0 0 0 -1 0 1 0]; # CaT m0h0 -> m0h1
+            [0 0 0 0 0 0 0 0 0 0 1 0 -1 0]; # CaT m0h1 -> m0h0
+            [0 0 0 0 0 0 0 0 0 0 0 -1 0 1]; # CaT m1h0 -> O
+            [0 0 0 0 0 0 0 0 0 0 0 1 0 -1]; # CaT O -> m1h0
+            [0 0 0 0 0 0 0 0 0 0 0 0 -1 1]; # CaT m0h1 -> O
+            [0 0 0 0 0 0 0 0 0 0 0 0 1 -1]] # CaT O -> m0h1
 
 # function to run between events
 function stim_events(xc0,xd0,parms,event_times, event_indices)
