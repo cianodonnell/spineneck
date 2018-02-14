@@ -1,0 +1,349 @@
+#LyX 2.2 created this file. For more info see http://www.lyx.org/
+\lyxformat 508
+\begin_document
+\begin_header
+\save_transient_properties true
+\origin unavailable
+\textclass scrartcl
+\use_default_options true
+\begin_modules
+theorems-ams
+eqs-within-sections
+figs-within-sections
+\end_modules
+\maintain_unincluded_children false
+\language english
+\language_package default
+\inputencoding auto
+\fontencoding global
+\font_roman "default" "default"
+\font_sans "default" "default"
+\font_typewriter "default" "default"
+\font_math "auto" "auto"
+\font_default_family default
+\use_non_tex_fonts false
+\font_sc false
+\font_osf false
+\font_sf_scale 100 100
+\font_tt_scale 100 100
+\graphics default
+\default_output_format default
+\output_sync 0
+\bibtex_command default
+\index_command default
+\paperfontsize default
+\spacing single
+\use_hyperref false
+\papersize default
+\use_geometry false
+\use_package amsmath 1
+\use_package amssymb 1
+\use_package cancel 1
+\use_package esint 1
+\use_package mathdots 1
+\use_package mathtools 1
+\use_package mhchem 1
+\use_package stackrel 1
+\use_package stmaryrd 1
+\use_package undertilde 1
+\cite_engine basic
+\cite_engine_type default
+\biblio_style plain
+\use_bibtopic false
+\use_indices false
+\paperorientation portrait
+\suppress_date false
+\justification true
+\use_refstyle 1
+\index Index
+\shortcut idx
+\color #008000
+\end_index
+\secnumdepth 3
+\tocdepth 3
+\paragraph_separation indent
+\paragraph_indentation default
+\quotes_language english
+\papercolumns 1
+\papersides 1
+\paperpagestyle default
+\tracking_changes false
+\output_changes false
+\html_math_output 0
+\html_css_as_file 0
+\html_be_strict false
+\end_header
+
+\begin_body
+
+\begin_layout Title
+Calcium channel models
+\end_layout
+
+\begin_layout Standard
+This note derives stochastic single-channel models of an R-type and T-type
+ calcium channel from the data presented in Magee and Johnston, J Physiol
+ (1995).
+\end_layout
+
+\begin_layout Section
+Data description
+\end_layout
+
+\begin_layout Standard
+The data are single-channel recordings from patches of rat CA1 pyramidal
+ neuron dendrite.
+ They report channel open times, voltage dependencies for activation and
+ inactivation.
+\end_layout
+
+\begin_layout Standard
+\begin_inset Float figure
+placement h
+wide false
+sideways false
+status open
+
+\begin_layout Plain Layout
+\begin_inset Graphics
+	filename cav_table.png
+	lyxscale 30
+	width 100text%
+
+\end_inset
+
+
+\begin_inset Caption Standard
+
+\begin_layout Plain Layout
+Estimates of single channel properties from Magee and Johnston.
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Section
+Channel models
+\end_layout
+
+\begin_layout Standard
+Magee and Johnston fit the following steady-state activation and inactivation
+ functions of voltage 
+\begin_inset Formula $V$
+\end_inset
+
+ respectively:
+\begin_inset Formula 
+\[
+m_{\infty}(V)=\frac{1}{1+\exp(\frac{V_{1/2}-V}{k})}
+\]
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+and 
+\begin_inset Formula 
+\[
+h_{\infty}(V)=\frac{1}{1+\exp(\frac{V-V_{1/2}}{k})}
+\]
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+where 
+\begin_inset Formula $m$
+\end_inset
+
+ and 
+\begin_inset Formula $h$
+\end_inset
+
+ are the gating variables, 
+\begin_inset Formula $V_{1/2}$
+\end_inset
+
+ is the half-maximum voltage and 
+\begin_inset Formula $k$
+\end_inset
+
+ is the slope factor.
+\end_layout
+
+\begin_layout Standard
+We want to convert this model into a four-state single channel model (
+\begin_inset Formula $m_{0}h_{0}$
+\end_inset
+
+, 
+\begin_inset Formula $m_{1}h_{0}$
+\end_inset
+
+, 
+\begin_inset Formula $m_{0}h_{1}$
+\end_inset
+
+ and 
+\begin_inset Formula $m_{1}h_{1}$
+\end_inset
+
+, i.e.
+ the open state.) The eight transition rates (
+\begin_inset Formula $\alpha$
+\end_inset
+
+ for forward, 
+\begin_inset Formula $\beta$
+\end_inset
+
+ for backward) between these four states are derived from the activation
+ functions above
+\begin_inset Formula 
+\[
+x_{\infty}(V)=\frac{\alpha(V)}{\alpha(V)+\beta(V)}
+\]
+
+\end_inset
+
+ and the time constants
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula 
+\[
+\tau(V)=\frac{1}{\alpha(V)+\beta(V)}
+\]
+
+\end_inset
+
+For inactivation, we can take the 
+\begin_inset Formula $\tau_{h}$
+\end_inset
+
+ from the table above, and assume it is independent of voltage.
+ Although this is not usually true, time constants typically remain within
+ a certain order of magnitude across the physiological voltage range, so
+ it will not be a bad approximation.
+ Then 
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula 
+\begin{equation}
+\alpha_{h}(V)=\frac{h_{\infty}(V)}{\tau_{h}}
+\end{equation}
+
+\end_inset
+
+and 
+\begin_inset Formula 
+\begin{equation}
+\beta_{h}(V)=\frac{1-h_{\infty}(V)}{\tau_{h}}
+\end{equation}
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+For activation (
+\begin_inset Formula $m$
+\end_inset
+
+ gates), we don't know 
+\begin_inset Formula $\tau_{m}$
+\end_inset
+
+ but we do know the closing rate when open at a particular voltage 
+\begin_inset Formula $V'$
+\end_inset
+
+, from the `open time' in the above table.
+ We can assume this corresponds to 
+\begin_inset Formula $\beta_{m}(V'$
+\end_inset
+
+) = 
+\begin_inset Formula $1/\Delta t_{open}$
+\end_inset
+
+.
+ We can then infer 
+\begin_inset Formula $\alpha_{m}(V'$
+\end_inset
+
+) by rearranging the above:
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula 
+\[
+\alpha_{m}(V')=\beta_{m}(V')\frac{m_{\infty}(V')}{1-m_{\infty}(V')}
+\]
+
+\end_inset
+
+This will let us find 
+\begin_inset Formula $\alpha_{m}$
+\end_inset
+
+ and 
+\begin_inset Formula $\beta_{m}$
+\end_inset
+
+ at a particular voltage 
+\begin_inset Formula $V'$
+\end_inset
+
+.
+ We can then make the assumption that 
+\begin_inset Formula $\tau_{m}$
+\end_inset
+
+ is independent of voltage, and compute it as above, 
+\begin_inset Formula $\tau_{m}=\tau_{m}(V')=1/(\alpha_{m}(V')+\beta(V'))$
+\end_inset
+
+.
+ With this we can then compute 
+\begin_inset Formula $\alpha_{m}$
+\end_inset
+
+ and 
+\begin_inset Formula $\beta_{m}$
+\end_inset
+
+ for any voltage from the two earlier equations 2.1 and 2.2.
+\end_layout
+
+\begin_layout Subsection*
+References
+\end_layout
+
+\begin_layout Standard
+Magee, J C, and D Johnston.
+ 1995.
+ “Characterization of Single Voltage-Gated Na+ and Ca2+ Channels in Apical
+ Dendrites of Rat CA1 Pyramidal Neurons.” The Journal of Physiology 487 (
+ Pt 1) (August): 67–90.
+\end_layout
+
+\end_body
+\end_document

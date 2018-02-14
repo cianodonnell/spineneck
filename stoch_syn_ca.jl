@@ -78,6 +78,8 @@ function F_ss!(xcdot::Vector{Float64},xc::Vector{Float64}, xd::Array{Int64}, t::
 
   No_ampa = xd[2];
   No_nmda = xd[4];
+  No_car = xd[10];
+  No_cat = xd[14];
 
   gamma_ampa = parms[2];
   E_ampa = parms[3];
@@ -114,6 +116,35 @@ function R_ss(xc, xd, t, parms, sum_rate::Bool)
   N_ampa = parms[1];
   glu = parms[12] # Glutamate present? 0 = no, 1 = yes
   Mg = parms[16];
+
+  beta_m_r_star = 1/(4e-4)
+  minf_m_r_star = 1/(1+exp((0.003-0.01)/0.008))
+  alpha_m_r_star = beta_m_r_star*minf_m_r_star/(1-minf_m_r_star)
+  tau_m_r = 1/(alpha_m_r_star + beta_m_r_star)
+  minf_r = 1/(1+exp((0.003-Vs)/0.008))
+  alpha_m_r = minf_r/tau_m_r
+  beta_m_r = (1-minf_r)/tau_m_r
+
+  tau_h_r = 100e-3
+  hinf_r = 1/(1 + exp((Vs+0.039)/0.0092))
+  alpha_h_r = hinf_r/tau_h_r
+  beta_h_r = (1-hinf_r)/tau_h_r
+
+# Add in correct T-type rates
+  beta_m_t_star = 1/(1e-3)
+  minf_m_t_star = 1/(1+exp((-0.032+0.02)/0.007))
+  alpha_m_t_star = beta_m_t_star*minf_m_t_star/(1-minf_m_t_star)
+  tau_m_t = 1/(alpha_m_t_star + beta_m_t_star)
+  minf_t = 1/(1+exp((-0.032-Vs)/0.007))
+  alpha_m_t = minf_t/tau_m_t
+  beta_m_t = (1-minf_t)/tau_m_t
+
+  tau_h_t = 50e-3
+  hinf_t = 1/(1 + exp((Vs+0.07)/0.0065))
+  alpha_h_t = hinf_t/tau_h_t
+  beta_h_t = (1-hinf_t)/tau_h_t
+
+
   if sum_rate==false
     return vec([ xd[1]*glu*3000,
                  xd[2]*500,
@@ -124,7 +155,23 @@ function R_ss(xc, xd, t, parms, sum_rate::Bool)
                  xd[5]*1000*exp(-0.693), # B1
                  xd[4]*Mg*1000*exp(-0.045*Vs - 6.97), # a2
                  xd[6]*1000*exp(0.017*Vs + 0.96), # b2
-                 xd[6]*1000*exp(-3.101) ]) # B2
+                 xd[6]*1000*exp(-3.101), # B2
+                 xd[7]*alpha_m_r,
+                 xd[8]*beta_m_r,
+                 xd[7]*alpha_h_r,
+                 xd[9]*beta_h_r,
+                 xd[8]*alpha_h_r,
+                 xd[10]*beta_h_r,
+                 xd[9]*alpha_m_r,
+                 xd[10]*beta_m_r,
+                 xd[11]*alpha_m_t,
+                 xd[12]*beta_m_t,
+                 xd[11]*alpha_h_t,
+                 xd[13]*beta_h_t,
+                 xd[12]*alpha_h_t,
+                 xd[14]*beta_h_t,
+                 xd[13]*alpha_m_t,
+                 xd[14]*beta_m_t])
   else
     return       xd[1]*glu*3000 +
                  xd[2]*500 +
@@ -135,11 +182,27 @@ function R_ss(xc, xd, t, parms, sum_rate::Bool)
                  xd[5]*1000*exp(-0.693) +
                  xd[4]*Mg*1000*exp(-0.045*Vs - 6.97) +
                  xd[6]*1000*exp(0.017*Vs + 0.96) +
-                 xd[6]*1000*exp(-3.101)
+                 xd[6]*1000*exp(-3.101) +
+                 xd[7]*alpha_m_r +
+                 xd[8]*beta_m_r +
+                 xd[7]*alpha_h_r +
+                 xd[9]*beta_h_r +
+                 xd[8]*alpha_h_r +
+                 xd[10]*beta_h_r +
+                 xd[9]*alpha_m_r +
+                 xd[10]*beta_m_r +
+                 xd[11]*alpha_m_t +
+                 xd[12]*beta_m_t +
+                 xd[11]*alpha_h_t +
+                 xd[13]*beta_h_t +
+                 xd[12]*alpha_h_t +
+                 xd[14]*beta_h_t +
+                 xd[13]*alpha_m_t +
+                 xd[14]*beta_m_t
   end
 end
 
-# matrix of jumps for the discrete variables, analogous to chemical reactions
+# matrix of jumps for the discrete variables
 const nu = [[-1 1 0 0 0 0 0 0 0 0 0 0 0 0]; # AMPA C -> O
             [1 -1 0 0 0 0 0 0 0 0 0 0 0 0]; # AMPA O -> C
             [0 0 -1 1 0 0 0 0 0 0 0 0 0 0]; # NMDA C -> O
@@ -215,10 +278,10 @@ end
 # INITIAL CONDITIONS
 ######
 xc0 = vec([-70e-3, -70e-3, 0])
-xd0 = vec([N_ampa, 0, N_nmda, 0, 0, 0]); # Initial states of AMPA/NMDArs
+xd0 = vec([N_ampa, 0, N_nmda, 0, 0, 0, N_car, 0, 0, 0, N_cat, 0, 0, 0]); # Initial states of AMPA/NMDArs
 
 # parameters
-tf = 1000 # ms
+tf = 100 # ms
 
 # Event times
 event_times = 1e-3*collect(5:5:tf)
@@ -236,7 +299,7 @@ dummy =  PDMP.pdmp(100,xc0,xd0,F_ss!,R_ss,nu,parms,0.0,tf*1e-3,false)
 # compute a trajectory
 tt,XC,XD = stim_events(xc0,xd0,parms,event_times,event_indices);
 
-ntrials = 10
+ntrials = 2
 results_time = Vector(ntrials)
 results_XC = Vector(ntrials)
 results_XD = Vector(ntrials)
