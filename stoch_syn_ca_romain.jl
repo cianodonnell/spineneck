@@ -65,7 +65,7 @@ ca_tau = 0.014 # s, spine calcium decay time constant (pumping)
 sampling_rate = 1. # it helps when total_rate is equal to zero...
 
 # collect parameters
-parms = Vector{Float64}([N_ampa, gamma_ampa, E_ampa, N_nmda, gamma_nmda, E_nmda, R_neck, Cs, Cd, gdend, Eleak, glu_base, glu_width, eta_ca_nmdar, ca_tau, Mg, sampling_rate]);
+parms = Vector{Float64}([N_ampa, gamma_ampa, E_ampa, N_nmda, gamma_nmda, E_nmda, R_neck, Cs, Cd, gdend, Eleak, glu_base, glu_width, eta_ca_nmdar, ca_tau, Mg, eta_ca_cav, E_cav, gamma_car, gamma_cat, sampling_rate]);
 
 ###########
 # DEFINE DYNAMICS
@@ -95,6 +95,10 @@ function F_ss!(xcdot::Vector{Float64},xc::Vector{Float64}, xd::Array{Int64}, t::
 
   eta_ca_nmdar = parms[14];
   ca_tau       = parms[15];
+  eta_ca_cav = parms[16];
+  E_cav = parms[17];
+  gamma_car = parms[18];
+  gamma_cat = parms[19];
 
   xcdot[1] = ( -(Vs-Vd)/Rneck
                - No_ampa*gamma_ampa*(Vs-E_ampa)
@@ -103,10 +107,10 @@ function F_ss!(xcdot::Vector{Float64},xc::Vector{Float64}, xd::Array{Int64}, t::
                - No_cat*gamma_cat*(Vs-E_cav) )/Cs;
   # xcdot[1] = ( -(Vs-Vd)/Rneck )/Cs;
   xcdot[2] = ( -(Vd-Vs)/Rneck - gdend*(Vd-Eleak) )/Cd;
-  xcdot[3] = -Ca/ca_tau
+  xcdot[3] = ( -Ca/ca_tau
             + eta_ca_nmdar*No_nmda*gamma_nmda*(E_nmda-Vs)
             + eta_ca_cav*No_car*gamma_car*(E_cav-Vs)
-            + eta_ca_cav*No_cat*gamma_cat*(E_cav-Vs);
+            + eta_ca_cav*No_cat*gamma_cat*(E_cav-Vs) );
 
 end
 
@@ -132,7 +136,6 @@ function R_ss(rate, xc, xd, t, parms, sum_rate::Bool)
   alpha_h_r = hinf_r/tau_h_r
   beta_h_r = (1-hinf_r)/tau_h_r
 
-# Add in correct T-type rates
   beta_m_t_star = 1/(1e-3)
   minf_m_t_star = 1/(1+exp((-0.032+0.02)/0.007))
   alpha_m_t_star = beta_m_t_star*minf_m_t_star/(1-minf_m_t_star)
@@ -281,11 +284,11 @@ end
 #######
 # INITIAL CONDITIONS
 ######
-xc0 = vec([-70e-3, -70e-3, 0])
-xd0 = vec([N_ampa, 0, N_nmda, 0, 0, 0, N_car, 0, 0, 0, N_cat, 0, 0, 0, 0]); # Initial states of AMPA/NMDArs
+xc0 = vec([-70e-3, -70e-3, 0]) # Initial states of continuous variables
+xd0 = vec([N_ampa, 0, N_nmda, 0, 0, 0, N_car, 0, 0, 0, N_cat, 0, 0, 0, 0]); # Initial states of discrete variables
 
 # parameters
-tf = 100 # ms
+tf = 50 # ms
 
 # Event times
 event_times = 1e-3*collect(5:5:tf)
@@ -303,9 +306,7 @@ dummy =  PDMP.pdmp!(xc0,xd0,F_ss!,R_ss,nu,parms,0.0,tf*1e-3,n_jumps = 100)
 # compute a trajectory
 tt,XC,XD = stim_events(xc0,xd0,parms,event_times,event_indices);
 
-Plots.plot(tt,XC[3,:])
-
-ntrials = 2
+ntrials = 20
 results_time = Vector(ntrials)
 results_XC = Vector(ntrials)
 results_XD = Vector(ntrials)
@@ -322,15 +323,15 @@ gr(reuse=false)
 # Plots.plot!(tt*1000, XC[2,:],label="Vdend")
 # Plots.plot(tt*1000,XC[3,:],label="Spine [Ca2+]")
 
-Plots.plot(results_time[1]*1000, results_XD[1][2,:],line=:step, linecolor=:blue)
+p = Plots.plot(results_time[1]*1000, results_XD[1][2,:],line=:step, linecolor=:blue)
 for i = 1:ntrials
   Plots.plot!(results_time[i]*1000, results_XD[i][2,:],line=:step,linecolor=:blue)
   Plots.display(Plots.plot!(results_time[i]*1000, results_XD[i][4,:],line=:step,linecolor=:red))
 end
 
-gr(reuse=false) #this is not needed
-q = Plots.plot(results_time[1]*1000, results_XC[1][3,:],line=:step, linecolor=:green)
+
+q = Plots.plot(results_time[1]*1000, results_XC[1][3,:], linecolor=:green)
 for i = 2:ntrials
-  Plots.plot!(results_time[i]*1000, results_XC[i][3,:],line=:step,linecolor=:green)
+  Plots.plot!(results_time[i]*1000, results_XC[i][3,:],linecolor=:green)
 end
 q
