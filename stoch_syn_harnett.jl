@@ -5,7 +5,8 @@ Emulate Harnett et al Nature 2012 experiments. Can either activate synapse via g
 
 
 # load libraries
-using PDMP,Sundials
+using PDMP
+using Sundials
 
 # Continuous variables:
 # 1) Spine voltage
@@ -63,8 +64,8 @@ R_neck = 500.0e6 # Ohm
 glu_base = 1e-4 # glutamate pulse
 glu_width = 2.0e-4 # (ms) glutamate pulse width
 
-eta_ca_nmdar = 0.1 # scaling constant determining magnitude of calcium influx relative to NMDAR current
-eta_ca_cav = 1 # scaling constant determining magnitude of calcium influx relative to CaV current
+eta_ca_nmdar = 0.1e15 # scaling constant determining magnitude of calcium influx relative to NMDAR current
+eta_ca_cav = 1e15 # scaling constant determining magnitude of calcium influx relative to CaV current
 ca_tau = 0.014 # s, spine calcium decay time constant (pumping)
 
 # saving saving in PDMP
@@ -101,7 +102,7 @@ function F_ss!(xcdot::Vector{Float64},xc::Vector{Float64}, xd::Array{Int64}, t::
 
   eta_ca_nmdar = parms[14];
   ca_tau       = parms[15];
-  eta_ca_cav = parms[16];
+  eta_ca_cav = parms[17];
   E_cav = parms[18];
   gamma_car = parms[19];
   gamma_cat = parms[20];
@@ -254,7 +255,7 @@ function stim_events(xc0,xd0,parms,event_times, event_indices)
   for (countloop, tevent) in enumerate(event_times)
     if event_indices[countloop]==1
       parms[12] = 1e-4 # set glutamate off
-      res =  PDMP.pdmp!(xc0,xd0,F_ss!,R_ss,nu,parms,ts,tevent,ode=:lsoda,n_jumps = 100)
+      res =  PDMP.pdmp!(xc0,xd0,F_ss!,R_ss,nu,parms,ts,tevent,ode=:lsoda,n_jumps = 1000)
       XC = hcat(XC,copy(res.xc[:,2:end]))
       XD = hcat(XD,copy(res.xd[:,2:end]))
       tt = vcat(tt,vec(res.time[2:end]))
@@ -263,7 +264,7 @@ function stim_events(xc0,xd0,parms,event_times, event_indices)
 
       parms[12] = 1.0 # set glutamate on
       tend = tevent + glu_width
-      res =  PDMP.pdmp!(xc0,xd0,F_ss!,R_ss,nu,parms,tevent,tend,ode=:lsoda,n_jumps = 100)
+      res =  PDMP.pdmp!(xc0,xd0,F_ss!,R_ss,nu,parms,tevent,tend,ode=:lsoda,n_jumps = 1000)
       XC = hcat(XC,copy(res.xc[:,2:end]))
       XD = hcat(XD,copy(res.xd[:,2:end]))
       tt = vcat(tt,vec(res.time[2:end]))
@@ -273,7 +274,7 @@ function stim_events(xc0,xd0,parms,event_times, event_indices)
 
     elseif event_indices[countloop]==0
       parms[12] = 1e-4 # set glutamate off
-      res =  PDMP.pdmp!(xc0,xd0,F_ss!,R_ss,nu,parms,ts,tevent,ode=:lsoda,n_jumps = 100)
+      res =  PDMP.pdmp!(xc0,xd0,F_ss!,R_ss,nu,parms,ts,tevent,ode=:lsoda,n_jumps = 1000)
       XC = hcat(XC,copy(res.xc[:,2:end]))
       XD = hcat(XD,copy(res.xd[:,2:end]))
       tt = vcat(tt,vec(res.time[2:end]))
@@ -291,7 +292,7 @@ end
 # INITIAL CONDITIONS
 ######
 xc0 = vec([-70e-3, -70e-3, 0]) # Initial states of continuous variables
-xd0 = vec([N_ampa, 0, N_nmda, 0, 0, 0, N_car, 0, 0, 0, N_cat, 0, 0, 0, 0]); # Initial states of discrete variables
+xd0 = vec([N_ampa, 0, N_nmda, 0, 0, 0, 0, 0, N_car, 0, 0, 0, N_cat, 0, 0]); # Initial states of discrete variables
 
 # parameters
 tf = 50 # ms
@@ -312,7 +313,7 @@ dummy =  PDMP.pdmp!(xc0,xd0,F_ss!,R_ss,nu,parms,0.0,tf*1e-3,n_jumps = 100)
 # compute a trajectory
 tt,XC,XD = stim_events(xc0,xd0,parms,event_times,event_indices);
 
-ntrials = 20
+ntrials = 200
 results_time = Vector(ntrials)
 results_XC = Vector(ntrials)
 results_XD = Vector(ntrials)
@@ -324,6 +325,28 @@ using Plots, GR
 gr(reuse=false)
 # plotly()
 
+##########
+# POST ANALYSIS
+#########
+
+peak_Ca = zeros(ntrials,1)
+peak_Vspine = zeros(ntrials,1)
+peak_Vdend = zeros(ntrials,1)
+for i = 1:ntrials
+  peak_Vspine[i] = maximum(results_XC[i][1,:])
+  peak_Vdend[i] = maximum(results_XC[i][2,:])
+  peak_Ca[i] = maximum(results_XC[i][3,:])
+end
+
+cv_peak_Vspine = std(peak_Vspine)/(mean(peak_Vspine - Eleak))
+cv_peak_Vdend = std(peak_Vdend)/(mean(peak_Vdend - Eleak))
+cv_peak_Ca = std(peak_Ca)/mean(peak_Ca)
+
+
+
+#########
+# PLOTTING
+#########
 
 # Plots.plot(tt*1000, XD[2,:],line=:step,xlabel = "Time (ms)",ylabel = "Number open",label="AMPA")
 # Plots.plot!(tt*1000, XD[4,:],line=:step,xlabel = "Time (ms)",ylabel = "Number open",label="NMDA")
@@ -343,12 +366,15 @@ for i = 2:ntrials
 end
 p
 
+
+# Plot Calcium
 q = Plots.plot(results_time[1]*1000, results_XC[1][3,:], label="Ca2+",xlabel="time (ms)",ylabel="a.u.", linecolor=:green,reuse=false)
 for i = 2:ntrials
   Plots.plot!(results_time[i]*1000, results_XC[i][3,:],label="",linecolor=:green)
 end
 q
 
+# Plot voltage
 r = Plots.plot(results_time[1]*1000, 1e3*results_XC[1][1,:], label="Vspine",xlabel="time (ms)",ylabel="Voltage (mV)", linecolor=:dodgerblue)
 Plots.plot!(results_time[1]*1000, 1e3*results_XC[1][2,:], label="Vdend", linecolor=:red)
 for i = 2:ntrials
@@ -356,3 +382,15 @@ for i = 2:ntrials
   Plots.plot!(results_time[i]*1000, 1e3*results_XC[i][2,:], label="", linecolor=:red)
 end
 r
+
+
+Plots.scatter(1e3*peak_Vspine,1e3*peak_Vdend,xlim=(-70,-40),ylim=(-70,-65),xlabel="Peak Vspine (mV)",ylabel="Peak Vdend (mV)")
+Plots.scatter(1e3*peak_Vspine,peak_Ca,xlim=(-70,-40),xlabel=" Peak Vspine (mV)",ylabel="Peak Calcium")
+
+
+Plots.plot(results_time[1]*1000, results_XD[1][10,:],line=:step,label="",linecolor=:magenta)
+Plots.display(Plots.plot!(results_time[1]*1000, results_XD[1][14,:],line=:step,label="",linecolor=:green))
+for i = 2:ntrials
+  Plots.display(Plots.plot!(results_time[i]*1000, results_XD[i][10,:],line=:step,label="",linecolor=:magenta))
+  Plots.display(Plots.plot!(results_time[i]*1000, results_XD[i][14,:],line=:step,label="",linecolor=:green))
+end
