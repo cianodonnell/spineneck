@@ -48,10 +48,10 @@ E_nmda = E_ampa
 Mg = 1 # uM
 
 # Calcium channels
-E_cav = 10e-3 # mV
-N_car = 5 # number of R-type calcium channels
+E_cav = 45e-3 # mV
+N_car = 3 # number of R-type calcium channels
 gamma_car = 17e-12  # (S) R-type single channel conductance
-N_cat = 5 # number of T-type calcium channels
+N_cat = 3 # number of T-type calcium channels
 gamma_cat = 10e-12  # (S) T-type single channel conductance
 
 # Electrical properties of spine
@@ -68,11 +68,15 @@ eta_ca_nmdar = 0.1e15 # scaling constant determining magnitude of calcium influx
 eta_ca_cav = 1e15 # scaling constant determining magnitude of calcium influx relative to CaV current
 ca_tau = 0.014 # s, spine calcium decay time constant (pumping)
 
+dye_kf = 800 # For OGB1 from Bartol et al 2015, assuming a [Ca] = 1uM.
+dye_kb = 160 # For OGB1 from Bartol et al 2015
+dye_tau = 1./(dye_kf + dye_kb)
+
 # saving saving in PDMP
 sampling_rate = 1. # it helps when total_rate is equal to zero...
 
 # collect parameters
-parms = Vector{Float64}([N_ampa, gamma_ampa, E_ampa, N_nmda, gamma_nmda, E_nmda, R_neck, Cs, Cd, gdend, Eleak, glu_base, glu_width, eta_ca_nmdar, ca_tau, Mg, eta_ca_cav, E_cav, gamma_car, gamma_cat, sampling_rate]);
+parms = Vector{Float64}([N_ampa, gamma_ampa, E_ampa, N_nmda, gamma_nmda, E_nmda, R_neck, Cs, Cd, gdend, Eleak, glu_base, glu_width, eta_ca_nmdar, ca_tau, Mg, eta_ca_cav, E_cav, gamma_car, gamma_cat, dye_kf, dye_kb, sampling_rate]);
 
 ###########
 # DEFINE DYNAMICS
@@ -84,6 +88,7 @@ function F_ss!(xcdot::Vector{Float64},xc::Vector{Float64}, xd::Array{Int64}, t::
   Vs = xc[1];
   Vd = xc[2];
   Ca = xc[3];
+  B = xc[4];
 
   No_ampa = xd[2];
   No_nmda = xd[4];
@@ -106,6 +111,8 @@ function F_ss!(xcdot::Vector{Float64},xc::Vector{Float64}, xd::Array{Int64}, t::
   E_cav = parms[18];
   gamma_car = parms[19];
   gamma_cat = parms[20];
+  dye_kf = parms[21];
+  dye_kb = parms[22];
 
   xcdot[1] = ( -(Vs-Vd)/Rneck
                - No_ampa*gamma_ampa*(Vs-E_ampa)
@@ -118,6 +125,7 @@ function F_ss!(xcdot::Vector{Float64},xc::Vector{Float64}, xd::Array{Int64}, t::
             + eta_ca_nmdar*No_nmda*gamma_nmda*(E_nmda-Vs)
             + eta_ca_cav*No_car*gamma_car*(E_cav-Vs)
             + eta_ca_cav*No_cat*gamma_cat*(E_cav-Vs) );
+  xcdot[4] = -dye_kb*B + dye_kf*Ca
 
 end
 
@@ -158,9 +166,9 @@ function R_ss(rate, xc, xd, t, parms, sum_rate::Bool)
 
 
   if sum_rate==false
-    rate[1] = xd[1]*glu*3000
+    rate[1] = xd[1]*glu*5000
     rate[2] = xd[2]*500
-    rate[3] = xd[3]*glu*3000
+    rate[3] = xd[3]*glu*5000
     rate[4] = xd[4]*1000*exp(-2.847) # A
     rate[5] = xd[4]*1000*exp(-0.016*Vs - 2.91) # a1
     rate[6] = xd[5]*1000*exp(0.009*Vs + 1.22) # b1
@@ -187,9 +195,9 @@ function R_ss(rate, xc, xd, t, parms, sum_rate::Bool)
     rate[27] = parms[end]
     return 0.
   else
-    return       xd[1]*glu*3000 +
+    return       xd[1]*glu*5000 +
                  xd[2]*500 +
-                 xd[3]*glu*3000 +
+                 xd[3]*glu*5000 +
                  xd[4]*1000*exp(-2.847) +
                  xd[4]*1000*exp(-0.016*Vs - 2.91) +
                  xd[5]*1000*exp(0.009*Vs + 1.22) +
@@ -291,7 +299,7 @@ end
 #######
 # INITIAL CONDITIONS
 ######
-xc0 = vec([-70e-3, -70e-3, 0]) # Initial states of continuous variables
+xc0 = vec([-70e-3, -70e-3, 0, 0]) # Initial states of continuous variables
 xd0 = vec([N_ampa, 0, N_nmda, 0, 0, 0, 0, 0, N_car, 0, 0, 0, N_cat, 0, 0]); # Initial states of discrete variables
 
 # parameters
@@ -313,7 +321,7 @@ dummy =  PDMP.pdmp!(xc0,xd0,F_ss!,R_ss,nu,parms,0.0,tf*1e-3,n_jumps = 100)
 # compute a trajectory
 tt,XC,XD = stim_events(xc0,xd0,parms,event_times,event_indices);
 
-ntrials = 200
+ntrials = 20
 results_time = Vector(ntrials)
 results_XC = Vector(ntrials)
 results_XD = Vector(ntrials)
@@ -330,17 +338,20 @@ gr(reuse=false)
 #########
 
 peak_Ca = zeros(ntrials,1)
+peak_B = zeros(ntrials,1)
 peak_Vspine = zeros(ntrials,1)
 peak_Vdend = zeros(ntrials,1)
 for i = 1:ntrials
   peak_Vspine[i] = maximum(results_XC[i][1,:])
   peak_Vdend[i] = maximum(results_XC[i][2,:])
   peak_Ca[i] = maximum(results_XC[i][3,:])
+  peak_B[i] = maximum(results_XC[i][4,:])
 end
 
 cv_peak_Vspine = std(peak_Vspine)/(mean(peak_Vspine - Eleak))
 cv_peak_Vdend = std(peak_Vdend)/(mean(peak_Vdend - Eleak))
 cv_peak_Ca = std(peak_Ca)/mean(peak_Ca)
+cv_peak_B = std(peak_B)/mean(peak_B)
 
 
 
@@ -373,6 +384,13 @@ for i = 2:ntrials
   Plots.plot!(results_time[i]*1000, results_XC[i][3,:],label="",linecolor=:green)
 end
 q
+
+# Plot Buffer/dye
+q2 = Plots.plot(results_time[1]*1000, results_XC[1][4,:], label="Dye",xlabel="time (ms)",ylabel="a.u.", linecolor=:green,reuse=false)
+for i = 2:ntrials
+  Plots.plot!(results_time[i]*1000, results_XC[i][4,:],label="",linecolor=:green)
+end
+q2
 
 # Plot voltage
 r = Plots.plot(results_time[1]*1000, 1e3*results_XC[1][1,:], label="Vspine",xlabel="time (ms)",ylabel="Voltage (mV)", linecolor=:dodgerblue)
