@@ -72,11 +72,16 @@ dye_kf = 800 # For OGB1 from Bartol et al 2015, assuming a [Ca] = 1uM.
 dye_kb = 160 # For OGB1 from Bartol et al 2015
 dye_tau = 1./(dye_kf + dye_kb)
 
+A_bap = 400e-12 # Amps; Amplitude of dend current mimicking a BAP
+tau_rise_bap = 0.2e-3 # s; rise time constant of BAP current
+tau_decay_bap = 2e-3 # s; decay time constant of BAP current
+c_bap = # constant to make peak current equal 1
+
 # saving saving in PDMP
-sampling_rate = 1. # it helps when total_rate is equal to zero...
+sampling_rate = 10. # it helps when total_rate is equal to zero...
 
 # collect parameters
-parms = Vector{Float64}([N_ampa, gamma_ampa, E_ampa, N_nmda, gamma_nmda, E_nmda, R_neck, Cs, Cd, gdend, Eleak, glu_base, glu_width, eta_ca_nmdar, ca_tau, Mg, eta_ca_cav, E_cav, gamma_car, gamma_cat, dye_kf, dye_kb, sampling_rate]);
+parms = Vector{Float64}([N_ampa, gamma_ampa, E_ampa, N_nmda, gamma_nmda, E_nmda, R_neck, Cs, Cd, gdend, Eleak, glu_base, glu_width, eta_ca_nmdar, ca_tau, Mg, eta_ca_cav, E_cav, gamma_car, gamma_cat, dye_kf, dye_kb, A_bap, tau_rise_bap, tau_decay_bap, sampling_rate]);
 
 ###########
 # DEFINE DYNAMICS
@@ -89,6 +94,7 @@ function F_ss!(xcdot::Vector{Float64},xc::Vector{Float64}, xd::Array{Int64}, t::
   Vd = xc[2];
   Ca = xc[3];
   B = xc[4];
+  I_bap = A_bap*c_bap*(xc[6]-xc[5]);
 
   No_ampa = xd[2];
   No_nmda = xd[4];
@@ -113,19 +119,31 @@ function F_ss!(xcdot::Vector{Float64},xc::Vector{Float64}, xd::Array{Int64}, t::
   gamma_cat = parms[20];
   dye_kf = parms[21];
   dye_kb = parms[22];
+  tau_decay_bap = parms[24];
+  tau_decay_bap = parms[25];
 
+  # Spine voltage
   xcdot[1] = ( -(Vs-Vd)/Rneck
                - No_ampa*gamma_ampa*(Vs-E_ampa)
                - No_nmda*gamma_nmda*(Vs-E_nmda)
                - No_car*gamma_car*(Vs-E_cav)
                - No_cat*gamma_cat*(Vs-E_cav) )/Cs;
-  # xcdot[1] = ( -(Vs-Vd)/Rneck )/Cs;
-  xcdot[2] = ( -(Vd-Vs)/Rneck - gdend*(Vd-Eleak) )/Cd;
+
+  # Dendrite voltage
+  xcdot[2] = ( -(Vd-Vs)/Rneck - gdend*(Vd-Eleak) +  I_bap)/Cd;
+
+  # Spine calcium
   xcdot[3] = ( -Ca/ca_tau
             + eta_ca_nmdar*No_nmda*gamma_nmda*(E_nmda-Vs)
             + eta_ca_cav*No_car*gamma_car*(E_cav-Vs)
             + eta_ca_cav*No_cat*gamma_cat*(E_cav-Vs) );
-  xcdot[4] = -dye_kb*B + dye_kf*Ca
+
+  # Spine calicum dye/buffer
+  xcdot[4] = -dye_kb*B + dye_kf*Ca;
+
+  # Dendritic injected current mimicking BAP/EPSP waveform
+  xcdot[5] = - xc[5]/tau_rise_bap
+  xcdot[6] = - xc[6]/tau_decay_bap
 
 end
 
@@ -261,7 +279,7 @@ function stim_events(xc0,xd0,parms,event_times, event_indices)
   glu_width = parms[13]
 
   for (countloop, tevent) in enumerate(event_times)
-    if event_indices[countloop]==1
+    if event_indices[countloop]==1 # Activate synapses
       parms[12] = 1e-4 # set glutamate off
       res =  PDMP.pdmp!(xc0,xd0,F_ss!,R_ss,nu,parms,ts,tevent,ode=:lsoda,n_jumps = 1000)
       XC = hcat(XC,copy(res.xc[:,2:end]))
@@ -280,7 +298,19 @@ function stim_events(xc0,xd0,parms,event_times, event_indices)
       xd0 = XD[:,end]
       ts = tend
 
-    elseif event_indices[countloop]==0
+    elseif event_indices[countloop]==2 # BAP
+      parms[12] = 1e-4 # set glutamate off
+      xc0[5] = 1.0;
+      xc0[6] = 1.0;
+      res =  PDMP.pdmp!(xc0,xd0,F_ss!,R_ss,nu,parms,ts,tevent,ode=:lsoda,n_jumps = 1000)
+      XC = hcat(XC,copy(res.xc[:,2:end]))
+      XD = hcat(XD,copy(res.xd[:,2:end]))
+      tt = vcat(tt,vec(res.time[2:end]))
+      xc0 = XC[:,end]
+      xd0 = XD[:,end]
+      ts = tevent
+
+    elseif event_indices[countloop]==0 #
       parms[12] = 1e-4 # set glutamate off
       res =  PDMP.pdmp!(xc0,xd0,F_ss!,R_ss,nu,parms,ts,tevent,ode=:lsoda,n_jumps = 1000)
       XC = hcat(XC,copy(res.xc[:,2:end]))
@@ -299,7 +329,7 @@ end
 #######
 # INITIAL CONDITIONS
 ######
-xc0 = vec([-70e-3, -70e-3, 0, 0]) # Initial states of continuous variables
+xc0 = vec([-70e-3, -70e-3, 0, 0, 0]) # Initial states of continuous variables
 xd0 = vec([N_ampa, 0, N_nmda, 0, 0, 0, 0, 0, N_car, 0, 0, 0, N_cat, 0, 0]); # Initial states of discrete variables
 
 # parameters
@@ -307,9 +337,9 @@ tf = 50 # ms
 
 # Event times
 event_times = 1e-3*collect(5:5:tf)
-event_times = [10e-3 100e-3]
+#event_times = [10e-3 100e-3]
 event_indices = zeros(UInt8,event_times)
-event_indices[1] = 1
+event_indices[1] = 2 # 0 = passively record states / 1 = EPSP / 2 = BAP
 
 ########
 # RUN PROGRAM
@@ -321,7 +351,7 @@ dummy =  PDMP.pdmp!(xc0,xd0,F_ss!,R_ss,nu,parms,0.0,tf*1e-3,n_jumps = 100)
 # compute a trajectory
 tt,XC,XD = stim_events(xc0,xd0,parms,event_times,event_indices);
 
-ntrials = 20
+ntrials = 50
 results_time = Vector(ntrials)
 results_XC = Vector(ntrials)
 results_XD = Vector(ntrials)
@@ -348,7 +378,11 @@ for i = 1:ntrials
   peak_B[i] = maximum(results_XC[i][4,:])
 end
 
-cv_peak_Vspine = std(peak_Vspine)/(mean(peak_Vspine - Eleak))
+mean_peak_Vspine = mean(peak_Vspine - Eleak);
+mean_peak_Vdend = mean(peak_Vdend - Eleak);
+mean_peak_B = mean(peak_B);
+
+cv_peak_Vspine = std(peak_Vspine)/mean_peak_Vspine
 cv_peak_Vdend = std(peak_Vdend)/(mean(peak_Vdend - Eleak))
 cv_peak_Ca = std(peak_Ca)/mean(peak_Ca)
 cv_peak_B = std(peak_B)/mean(peak_B)
@@ -404,6 +438,7 @@ r
 
 Plots.scatter(1e3*peak_Vspine,1e3*peak_Vdend,xlim=(-70,-40),ylim=(-70,-65),xlabel="Peak Vspine (mV)",ylabel="Peak Vdend (mV)")
 Plots.scatter(1e3*peak_Vspine,peak_Ca,xlim=(-70,-40),xlabel=" Peak Vspine (mV)",ylabel="Peak Calcium")
+Plots.scatter(peak_Ca,peak_B,xlabel=" Peak Ca",ylabel="Peak Dye")
 
 
 Plots.plot(results_time[1]*1000, results_XD[1][10,:],line=:step,label="",linecolor=:magenta)
