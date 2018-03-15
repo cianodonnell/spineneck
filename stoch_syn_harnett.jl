@@ -31,7 +31,6 @@ using Sundials
 
 # NMDAR model from Jahr and Stevens J Neurosci (1990)
 
-
 ######
 # PARAMETERS
 ######
@@ -73,16 +72,17 @@ dye_kb = 160 # For OGB1 from Bartol et al 2015
 dye_tau = 1./(dye_kf + dye_kb)
 
 A_bap = 400e-12 # Amps; Amplitude of dend current mimicking a BAP
-tau_rise_bap = 3e-3 # s; rise time constant of BAP current
-tau_decay_bap = 10e-3 # s; decay time constant of BAP current
-tpeak = (tau_d*tau_r/(tau_d-tau_r))*log(tau_d/tau_r); # peak time of BAP current
-c_bap = 1./(exp(-tpeak/tau_d) - exp(-tpeak/tau_r))# constant to make peak current equal 1
+tau_rise_bap = 0.2e-3 # s; rise time constant of BAP current
+tau_decay_bap = 2e-3 # s; decay time constant of BAP current
+tpeak = (tau_decay_bap*tau_rise_bap/(tau_decay_bap-tau_rise_bap))*log(tau_decay_bap/tau_rise_bap); # peak time of BAP current
+c_bap = 1./(exp(-tpeak/tau_decay_bap) - exp(-tpeak/tau_rise_bap))# constant to make peak current equal 1
 
 # saving saving in PDMP
 sampling_rate = 1000. # it helps when total_rate is equal to zero...
 
 # collect parameters
 parms = Vector{Float64}([N_ampa, gamma_ampa, E_ampa, N_nmda, gamma_nmda, E_nmda, R_neck, Cs, Cd, gdend, Eleak, glu_base, glu_width, eta_ca_nmdar, ca_tau, Mg, eta_ca_cav, E_cav, gamma_car, gamma_cat, dye_kf, dye_kb, A_bap, tau_rise_bap, tau_decay_bap, sampling_rate]);
+
 
 ###########
 # DEFINE DYNAMICS
@@ -271,6 +271,7 @@ nu =       [[-1 1 0 0 0 0 0 0 0 0 0 0 0 0 0]; # AMPA C -> O
             [0 0 0 0 0 0 0 0 0 0 0 0 -1 1 0]; # CaT m0h1 -> O
             [0 0 0 0 0 0 0 0 0 0 0 0 1 -1 0];# CaT O -> m0h1
             [0 0 0 0 0 0 0 0 0 0 0 0 0  0 1]] # Poisson sampling
+
 # function to run between events
 function stim_events(xc0,xd0,parms,event_times, event_indices)
   XC = copy(xc0)
