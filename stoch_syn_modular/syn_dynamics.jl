@@ -99,9 +99,9 @@ function R_ss(rate, xc, xd, t, parms, sum_rate::Bool)
 
 
   if sum_rate==false
-    rate[1] = xd[1]*glu*5000
-    rate[2] = xd[2]*500
-    rate[3] = xd[3]*glu*5000
+    rate[1] = xd[1]*glu*2500
+    rate[2] = xd[2]*1000
+    rate[3] = xd[3]*glu*2500
     rate[4] = xd[4]*1000*exp(-2.847) # A
     rate[5] = xd[4]*1000*exp(-0.016*Vs - 2.91) # a1
     rate[6] = xd[5]*1000*exp(0.009*Vs + 1.22) # b1
@@ -128,9 +128,9 @@ function R_ss(rate, xc, xd, t, parms, sum_rate::Bool)
     rate[27] = parms[end]
     return 0.
   else
-    return       xd[1]*glu*5000 +
-                 xd[2]*500 +
-                 xd[3]*glu*5000 +
+    return       xd[1]*glu*2500 +
+                 xd[2]*1000 +
+                 xd[3]*glu*2500 +
                  xd[4]*1000*exp(-2.847) +
                  xd[4]*1000*exp(-0.016*Vs - 2.91) +
                  xd[5]*1000*exp(0.009*Vs + 1.22) +
@@ -196,7 +196,7 @@ function stim_events(xc0,xd0,parms,event_times, event_indices)
 
   for (countloop, tevent) in enumerate(event_times)
     if event_indices[countloop]==1 # Activate synapses
-      parms[12] = 1e-4 # set glutamate off
+      parms[12] = 0 # set glutamate off
       res =  PDMP.pdmp!(xc0,xd0,F_ss!,R_ss,nu,parms,ts,tevent,ode=:lsoda,n_jumps = 1000)
       XC = hcat(XC,copy(res.xc[:,2:end]))
       XD = hcat(XD,copy(res.xd[:,2:end]))
@@ -215,19 +215,19 @@ function stim_events(xc0,xd0,parms,event_times, event_indices)
       ts = tend
 
     elseif event_indices[countloop]==2 # BAP
-      parms[12] = 1e-4 # set glutamate off
-      xc0[5] = 1.0;
-      xc0[6] = 1.0;
+      parms[12] = 0 # set glutamate off
       res =  PDMP.pdmp!(xc0,xd0,F_ss!,R_ss,nu,parms,ts,tevent,ode=:lsoda,n_jumps = 1000)
       XC = hcat(XC,copy(res.xc[:,2:end]))
       XD = hcat(XD,copy(res.xd[:,2:end]))
       tt = vcat(tt,vec(res.time[2:end]))
       xc0 = XC[:,end]
       xd0 = XD[:,end]
+      xc0[5] = 1.0;
+      xc0[6] = 1.0;
       ts = tevent
 
     elseif event_indices[countloop]==0 #
-      parms[12] = 1e-4 # set glutamate off
+      parms[12] = 0 # set glutamate off
       res =  PDMP.pdmp!(xc0,xd0,F_ss!,R_ss,nu,parms,ts,tevent,ode=:lsoda,n_jumps = 1000)
       XC = hcat(XC,copy(res.xc[:,2:end]))
       XD = hcat(XD,copy(res.xd[:,2:end]))
